@@ -1,0 +1,2 @@
+Check if the node itself is included in the peers message
+	- if not, fix it as in task 1
