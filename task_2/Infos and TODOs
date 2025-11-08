@@ -33,10 +33,10 @@ object (with Genesis block):
 {"type":"object","object":{"T":"0000abc000000000000000000000000000000000000000000000000000000000","created":1671062400,"miner":"Marabu","nonce":"00000000000000000000000000000000000000000000000000000000005bb0f2","note":"The New York Times 2022-12-13: Scientists Achieve Nuclear Fusion Breakthrough With Blast of 192 Lasers","previd": null,"txids":[],"type":"block"}}
 
 object (with new syntactically valid "TRUST ME BRO" block):
-{"type": "object","object":{"T":"a0000000abc00000000000000000000000000000000000000000000000000000","created":"1671062400","miner":"Marabu","nonce":"000000000000000000000000000000000000000000000000000000021bea03ed","note":"TRUST ME BRO THIS IS A BLOCK BRO","previd": null,"txids":[],"type":"block"}}
+{"type": "object","object":{"T":"a0000000abc00000000000000000000000000000000000000000000000000000","created":1671062400,"miner":"Marabu","nonce":"000000000000000000000000000000000000000000000000000000021bea03ed","note":"TRUST ME BRO THIS IS A BLOCK BRO","previd": null,"txids":[],"type":"block"}}
 
 getobject (with "TRUST ME BRO" block blockid):
-{"objectid":"994ed65d8e293c7a4177256ddfa24ff46e1f498be69d560eb11aa1fd0dcd325a","type":"getobject"}
+{"objectid":"64e3374a11cb0d91b15a72db49d2390cd505aaa0de1f67597bf719ca0f81da07","type":"getobject"}
 
 ihaveobject (with "TRUST ME BRO" block blockid):
-{"objectid":"994ed65d8e293c7a4177256ddfa24ff46e1f498be69d560eb11aa1fd0dcd325a","type":"ihaveobject"}
+{"objectid":"64e3374a11cb0d91b15a72db49d2390cd505aaa0de1f67597bf719ca0f81da07","type":"ihaveobject"}
