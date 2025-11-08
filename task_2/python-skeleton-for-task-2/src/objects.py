@@ -51,11 +51,13 @@ def validate_block(block_dict):
     return True
 
 def validate_object(obj_dict):
-    # todo
-    return True
+    if obj_dict['type'] == "block":
+        return validate_block(obj_dict)
+    else:
+        return validate_transaction(obj_dict)
 
 def get_objid(obj_dict):
-    h = hashlib.sha256()
+    h = hashlib.blake2s()
     h.update(canonicalize(obj_dict))
     return h.hexdigest()
 

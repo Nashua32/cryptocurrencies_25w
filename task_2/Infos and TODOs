@@ -1,2 +1,42 @@
 Check if the node itself is included in the peers message
 	- if not, fix it as in task 1
+
+INFOS:
+I CHANGED THE DOCKERFILE, SINCE I THINK THE DATABASE DOESNT GET CREATED WITH THE ORIGINAL (NOT COMMENTED OUT) COMMANDS.
+
+HOW TO TEST THE APPLICATION:
+In the directory with the docker-compose.yml file run: 
+	docker compose up --build
+
+Then open another terminal and run
+	nc localhost 18018
+
+Then the application will send you a hello and getpeers message.
+You can then send your own messages. Here are some messages that you can send (just paste them into the terminal):
+
+hello:
+{"type":"hello","version":"0.10.0","agent":""}
+
+getpeers:
+{"type":"getpeers"}
+
+peers:
+{"peers":["block-ness-monster.12122393.xyz:18018","84.115.234.142:19518","41.66.68.47:63213","41.66.68.47:63024","128.130.112.69:46940","178.115.64.112:15896","41.66.68.47:61155","104.248.244.102:60026","78.104.182.48:64076","164.90.163.70:46342","128.130.122.75:18018","128.130.112.69:36906","128.131.80.223:56712","188.23.142.231:59255","213.47.146.220:42152","41.66.68.47:65136","kerma.zlayer.org:18018","kerma.necronda.net:18018","41.66.68.47:64412","128.131.80.223:60310","128.131.80.223:60323","78.104.182.48:37081","128.130.112.69:35382","128.130.246.138:58006","213.47.75.68:47024","128.140.95.112:18018","128.130.244.254:48428","213.47.75.68:41880","104.248.244.102:33630","104.248.244.102:33626"],"type":"peers"}
+
+ihaveobject (with Genesis block blockid):
+{"type":"ihaveobject","objectid":"00002fa163c7dab0991544424b9fd302bb1782b185e5a3bbdf12afb758e57dee"}
+
+getobject (with Genesis block blockid):
+{"objectid":"00002fa163c7dab0991544424b9fd302bb1782b185e5a3bbdf12afb758e57dee","type":"getobject"}
+
+object (with Genesis block):
+{"type":"object","object":{"T":"0000abc000000000000000000000000000000000000000000000000000000000","created":1671062400,"miner":"Marabu","nonce":"00000000000000000000000000000000000000000000000000000000005bb0f2","note":"The New York Times 2022-12-13: Scientists Achieve Nuclear Fusion Breakthrough With Blast of 192 Lasers","previd": null,"txids":[],"type":"block"}}
+
+object (with new syntactically valid "TRUST ME BRO" block):
+{"type": "object","object":{"T":"a0000000abc00000000000000000000000000000000000000000000000000000","created":"1671062400","miner":"Marabu","nonce":"000000000000000000000000000000000000000000000000000000021bea03ed","note":"TRUST ME BRO THIS IS A BLOCK BRO","previd": null,"txids":[],"type":"block"}}
+
+getobject (with "TRUST ME BRO" block blockid):
+{"objectid":"994ed65d8e293c7a4177256ddfa24ff46e1f498be69d560eb11aa1fd0dcd325a","type":"getobject"}
+
+ihaveobject (with "TRUST ME BRO" block blockid):
+{"objectid":"994ed65d8e293c7a4177256ddfa24ff46e1f498be69d560eb11aa1fd0dcd325a","type":"ihaveobject"}

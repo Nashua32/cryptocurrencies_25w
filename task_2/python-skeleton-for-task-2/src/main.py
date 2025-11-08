@@ -5,6 +5,8 @@ from jcs import canonicalize
 
 import mempool
 import peer_db
+import objects
+import object_db
 
 import asyncio
 import ipaddress
@@ -75,13 +77,13 @@ def mk_peers_msg():
     return {"type": "peers", "peers": pl}
 
 def mk_getobject_msg(objid):
-    pass # TODO
+    return {"type": "getobject", "objectid": objid}
 
 def mk_object_msg(obj_dict):
-    pass # TODO
+    return {"type": "object", "object": obj_dict}
 
 def mk_ihaveobject_msg(objid):
-    pass # TODO
+    return {"type": "ihaveobject", "objectid": objid}
 
 def mk_chaintip_msg(blockid):
     pass # TODO
@@ -257,15 +259,27 @@ def validate_error_msg(msg_dict):
 
 # raise an exception if not valid
 def validate_ihaveobject_msg(msg_dict):
-    pass # TODO
+    if msg_dict['type'] != 'ihaveobject':
+        raise ErrorInvalidFormat("Message type is not 'ihaveobject'!")
+    
+    validate_allowed_keys(msg_dict, ['type', 'objectid'], 'ihaveobject')
 
 # raise an exception if not valid
 def validate_getobject_msg(msg_dict):
-    pass # TODO
+    if msg_dict['type'] != 'getobject':
+        raise ErrorInvalidFormat("Message type is not 'getobject'!")
+    
+    validate_allowed_keys(msg_dict, ['type', 'objectid'], 'getobject')
 
 # raise an exception if not valid
 def validate_object_msg(msg_dict):
-    pass # TODO
+    if msg_dict['type'] != 'object':
+        raise ErrorInvalidFormat("Message type is not 'object'!")
+    
+    validate_allowed_keys(msg_dict, ['type', 'object'], 'object')
+
+    if not objects.validate_object(msg_dict):
+        raise ErrorInvalidFormat("Received object is of invalid format!")
 
 # raise an exception if not valid
 def validate_chaintip_msg(msg_dict):
@@ -320,11 +334,16 @@ def handle_error_msg(msg_dict, peer_self):
 
 
 async def handle_ihaveobject_msg(msg_dict, writer):
-    pass # TODO
+    objectid = msg_dict['objectid']
+    if not object_db.exists_object(objectid):
+        await write_msg(writer, mk_getobject_msg(objectid))
 
 
 async def handle_getobject_msg(msg_dict, writer):
-    pass # TODO
+    objectid = msg_dict['objectid']
+    object = object_db.get_object(objectid)
+    if object:
+        await write_msg(writer, mk_object_msg(object))
 
 # return a list of transactions that tx_dict references
 def gather_previous_txs(db_cur, tx_dict):
@@ -366,8 +385,18 @@ async def del_verify_block_task(task, objid):
 
 # what to do when an object message arrives
 async def handle_object_msg(msg_dict, peer_self, writer):
-    pass # TODO
+    object = msg_dict['object']
+    objectid = objects.get_objid(object)
 
+    if not objects.validate_object(object):
+        raise ErrorInvalidFormat("Invalid object")
+
+    if not object_db.exists_object(objectid):
+        object_db.store_object(object, objectid)
+
+        # we send an ihaveobject msg to all connected peers, except the one that sent the object
+        ihave_object_msg = mk_ihaveobject_msg(objectid)
+        await broadcast_msg(ihave_object_msg, peer_self)
 
 # returns the chaintip blockid
 def get_chaintip_blockid():
@@ -391,7 +420,16 @@ async def handle_mempool_msg(msg_dict):
 
 # Helper function
 async def handle_queue_msg(msg_dict, writer):
-    pass # TODO
+    await write_msg(writer, msg_dict)
+
+# broadcasts the message to all connected peers, except the (ip, port) tuple given in the argument
+async def broadcast_msg(msg_dict, exclude_peer_tuple=None):
+    exclude_ip, exclude_port = exclude_peer_tuple
+    for peer, queue in CONNECTIONS.items():
+        if exclude_peer_tuple is not None and exclude_ip == peer.host and exclude_port == peer.port:
+            continue
+        await queue.put(msg_dict)
+
 
 # how to handle a connection
 async def handle_connection(reader, writer):

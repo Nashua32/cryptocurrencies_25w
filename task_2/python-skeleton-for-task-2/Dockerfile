@@ -6,6 +6,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ .
 
-CMD [ "rm", "peers.csv"]
+#CMD [ "rm", "peers.csv"]
 
-CMD [ "python", "-u", "main.py" ]
+#CMD [ "python", "-u", "main.py" ]
+
+CMD sh -c "rm -f peers.csv && python -u object_db.py && python -u main.py"
