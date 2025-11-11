@@ -388,8 +388,6 @@ async def handle_object_msg(msg_dict, peer_self, writer):
     object = msg_dict['object']
     objectid = objects.get_objid(object)
 
-    if not objects.validate_object(object):
-        raise ErrorInvalidFormat("Invalid object")
 
     if not object_db.exists_object(objectid):
         object_db.store_object(object, objectid)

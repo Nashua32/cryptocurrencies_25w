@@ -13,6 +13,8 @@ import constants as const
 
 import object_db as db
 
+from message.msgexceptions import NonfaultyNodeException
+
 # perform syntactic checks. returns true iff check succeeded
 OBJECTID_REGEX = re.compile("^[0-9a-f]{64}$")
 def validate_objectid(objid_str):
@@ -38,14 +40,6 @@ def validate_target(target_str):
     return isinstance(target_str, str) and bool(TARGET_REGEX.fullmatch(target_str))
 
 
-"""
-Transaction validation:
-1. for each input, validate outpoint
-    - does txid exist in database?
-    - if yes, does it have an output with the index?
-
-"""
-
 #validates one input of the transaction
 def validate_transaction_input(in_dict):
 
@@ -67,29 +61,17 @@ def validate_transaction_input(in_dict):
     txid = outpoint["txid"]
     index = outpoint["index"]
 
-    #check if input transaction exists and has given index
+    #check if the referenced transaction exists and has given index
 
     tr = db.get_object(txid)
 
     if tr is None:
-        return False
+        return "unkonwn_object" #does not necessarily indicate an error
 
     if "outputs" not in tr: #tr is not a transaction
         return False
     
     if not isinstance(index, int) or index < 0 or index >= len(tr["outputs"]):
-        return False
-    
-    referenced_output = tr["outputs"][index]
-
-    if not isinstance(referenced_output, dict) or "pubkey" not in referenced_output or "value" not in referenced_output:
-        return False
-    
-
-    #check if the signature of the input is valid (pubkey in the corresponding output of the input transaction)
-
-    pubkey = referenced_output["pubkey"]
-    if not verify_tx_signature(in_dict, sig, pubkey):
         return False
     
 
@@ -113,7 +95,7 @@ def validate_transaction_output(out_dict):
     if not validate_pubkey(pubkey):
         return False
     
-    if value < 0:
+    if not isinstance(value, int) or value < 0:
         return False
 
     return True
@@ -123,27 +105,17 @@ def validate_transaction(trans_dict):
     #syntactic checks
     if not isinstance(trans_dict, dict):
         return False
-
-    if "inputs" not in trans_dict or "outputs" not in trans_dict:
+    
+    #check if there are no additional keys in the dictionary that are not type, height, inputs and outputs
+    allowed_keys = {"type", "height", "inputs", "outputs"}
+    if not set(trans_dict.keys()).issubset(allowed_keys):
         return False
     
-    #TODO: add coinbase transactions!!!!!!!!!!!!!!!!
 
-    #validate inputs and sum their values
+     #validate outputs and sum their values (has to be done for both coinbase and normal transactions)
 
-    input_sum = 0
-
-    for inp in trans_dict["inputs"]:
-        if not validate_transaction_input(inp):
-            return False
-
-        referenced_tx = db.get_object(inp["outpoint"]["txid"])
-        index = inp["outpoint"]["index"]
-        referenced_output = referenced_tx["outputs"][index]
-        input_sum = input_sum + referenced_output["value"]
-
-
-    #validate outputs and sum their values
+    if not "outputs" in trans_dict:
+        return False
 
     output_sum = 0
 
@@ -153,8 +125,62 @@ def validate_transaction(trans_dict):
         
         output_sum = output_sum + outp["value"]
     
+
+
+    #check if it is a coinbase transaction
+    if "height" in trans_dict:
+        if not isinstance(trans_dict["height"], int):
+            return False
+
+        if "inputs" in trans_dict: #coinbase transaction has no inputs
+            return False
+        
+        return True #no semantic checks in this exercise yet
+    
+
+    #it is not a coinbase transaction -> validate the inputs, too
+
+    if "inputs" not in trans_dict or "outputs" not in trans_dict:
+        return False
+
+    #validate inputs, check their signatures and sum their values
+
+    input_sum = 0
+
+    for inp in trans_dict["inputs"]:
+
+        res = validate_transaction_input(inp)
+        if res is False:
+            return False
+        elif res == "unknown_object":
+            raise NonfaultyNodeException("The input transaction references an unknown object")
+
+        referenced_tx = db.get_object(inp["outpoint"]["txid"])
+        index = inp["outpoint"]["index"]
+        referenced_output = referenced_tx["outputs"][index]
+
+        if not isinstance (referenced_output, dict) or "pubkey" not in referenced_output or "value" not in referenced_output:
+            return False
+
+        #increase the input sum
+        input_sum = input_sum + referenced_output["value"]
+
+        #check the signature of the input
+        referenced_pubkey = referenced_output["pubkey"]
+        signature = inp["sig"]
+
+        if not validate_pubkey(referenced_pubkey) or not validate_signature(signature):
+            return False
+
+        if not verify_tx_signature(trans_dict, signature, referenced_pubkey):
+            return False
+
+
+    #check weak law of conversation
+
     if output_sum > input_sum:
         return False
+    
 
     return True
 
@@ -181,14 +207,15 @@ def get_objid(obj_dict):
 def verify_tx_signature(tx_dict, sig, pubkey):
 
     try: 
-        #replace sig in tx_dict with null
-        tx_no_sig = copy.deepcopy(tx_dict)
+        tx_no_sigs = copy.deepcopy(tx_dict)
 
-        #here, we assume tx_dict to just be an input transaction
-        if "sig" in tx_no_sig:
-            tx_no_sig["sig"] = None
+        #replace all sig values in tx_dict with null
+        if "inputs" in tx_no_sigs:
+            for inp in tx_no_sigs["inputs"]:
+                if "sig" in inp:
+                    inp["sig"] = None
         
-        plaintext_bytes = canonicalize(tx_no_sig)
+        plaintext_bytes = canonicalize(tx_no_sigs)
         pubkey_bytes = binascii.unhexlify(pubkey)
         sig_bytes = binascii.unhexlify(sig)
 
