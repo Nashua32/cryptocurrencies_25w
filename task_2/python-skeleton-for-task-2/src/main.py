@@ -278,7 +278,7 @@ def validate_object_msg(msg_dict):
     
     validate_allowed_keys(msg_dict, ['type', 'object'], 'object')
 
-    if not objects.validate_object(msg_dict):
+    if not objects.validate_object(msg_dict['object']):
         raise ErrorInvalidFormat("Received object is of invalid format!")
 
 # raise an exception if not valid
@@ -612,7 +612,7 @@ async def init():
     TX_WAIT_LOCK = asyncio.Condition()
 
     # PEERS.update(peer_db.load_peers())
-
+    #object_db.main()
     bootstrap_task = asyncio.create_task(bootstrap())
     listen_task = asyncio.create_task(listen())
 

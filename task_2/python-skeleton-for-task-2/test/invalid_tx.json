@@ -1,0 +1,5 @@
+{
+  "type": "transaction",
+  "inputs": "this-should-be-a-list-not-a-string",
+  "outputs": []
+}

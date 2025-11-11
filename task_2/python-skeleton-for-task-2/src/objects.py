@@ -66,7 +66,7 @@ def validate_transaction_input(in_dict):
     tr = db.get_object(txid)
 
     if tr is None:
-        return "unkonwn_object" #does not necessarily indicate an error
+        return "unknown_object" #does not necessarily indicate an error
 
     if "outputs" not in tr: #tr is not a transaction
         return False
@@ -153,7 +153,7 @@ def validate_transaction(trans_dict):
         if res is False:
             return False
         elif res == "unknown_object":
-            raise NonfaultyNodeException("UNKNOWN_OBJECT")
+            raise NonfaultyNodeException("Referenced object not known", "UNKNOWN_OBJECT")
 
         referenced_tx = db.get_object(inp["outpoint"]["txid"])
         index = inp["outpoint"]["index"]
