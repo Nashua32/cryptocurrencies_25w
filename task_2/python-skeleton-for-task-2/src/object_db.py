@@ -106,8 +106,6 @@ def get_object(objectid):
                 "txids": json.loads(row[7]) if row[7] else [],
                 "type": row[8]
             }
-        
-        print("NO BLOCK FOUND???")
 
         
         cur.execute("SELECT * FROM txs WHERE txid = ?", (objectid,))
