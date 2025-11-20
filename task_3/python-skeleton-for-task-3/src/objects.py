@@ -442,8 +442,6 @@ def verify_coinbase(coinbase_tx, block_txs, height):
         raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase tx output higher than transaction fees + block reward")
 
 
-# a horrible, ugly, and - most importantly - inefficient method to calculate the block height. All very suitable attributes of this course
-# TODO: DÓRA PLS DELETE THIS COMMENT
 def get_block_height(block_dict):
     height = 1
 
