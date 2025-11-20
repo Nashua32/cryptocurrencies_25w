@@ -513,6 +513,9 @@ async def handle_object_msg(msg_dict, peer_self, writer):
     for k, q in CONNECTIONS.items():
         await q.put(mk_ihaveobject_msg(objid))
 
+async def broadcast_getobject(objid):
+    for k, q in CONNECTIONS.items():
+        await q.put(mk_getobject_msg(objid))
 
 # returns the chaintip blockid
 def get_chaintip_blockid():
