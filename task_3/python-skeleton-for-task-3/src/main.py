@@ -495,17 +495,10 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             block = obj_dict
             block_id = objid
             previd = block['previd']
-
-            # Parent-Block muss bekannt sein (außer Genesis, aber die haben wir vorab in der DB)
-            if previd is None:
-                # Ein fremder Genesis-Block sollte in deinem Setup nicht aus dem Netzwerk kommen.
-                raise ErrorInvalidFormat("Received block with null previd from network")
-
+        
             prev_block = objects.get_db_object(previd)
             if prev_block is None:
-                # Parent fehlt -> getobject an Peers schicken und abbrechen
-                await broadcast_getobject(previd)
-                raise ErrorUnfindableObject("Block verification put on hold: Previous block not in local database")
+                raise ErrorUnknownObject(f"Parent block of block with id {block_id} not known")
 
             # UTXO-Set nach dem Parent-Block laden
             prev_utxo = objects.load_block_utxo(previd)
@@ -513,12 +506,44 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             # Blockhöhe kannst du zur Vollständigkeit mitgeben (wird in verify_block aktuell nicht verwendet)
             prev_height = objects.get_block_height(prev_block)
 
+            # Checking if we have all tx correspondings to the txids in the database
+            tx_ids = block['txids']
+            txs = []
+            for tx_id in tx_ids:
+
+                # If not, we send a getobject msg to the peers and leave validation pending ...
+                tx = objects.get_db_object(tx_id)
+                if tx is None:
+                    await write_msg(writer, mk_error_msg("Block verification put on hold", "UNFINDABLE_OBJECT"))
+                    await broadcast_getobject(tx_id)
+
+                    loop = asyncio.get_running_loop()
+                    started = loop.time()
+
+                    while not tx:
+                        # if we didn't receive the object in 5 seconds we stop the verification
+                        elapsed = loop.time() - started
+                        if elapsed >= 5.0:
+                            raise ErrorUnfindableObject("Block verification failed: Related transaction wasn't received in time")
+
+                        # we wait until a new transaction has been received ...
+                        async with TX_WAIT_LOCK:
+                            try:
+                                await asyncio.wait_for(TX_WAIT_LOCK.wait(), timeout=5.0 - elapsed)
+                            except asyncio.TimeoutError:
+                                raise ErrorUnfindableObject("Block verification failed: Related transaction wasn't received in time")
+                        
+                        # ... and check if it is the one we need
+                        tx = objects.get_db_object(tx_id)
+        
+                txs.append(tx)
+
             # verify_block:
             # - prüft T, Timestamp, PoW
             # - lädt und prüft alle TXs im Block
             # - führt das UTXO-Set auf Basis von prev_utxo fort
             # - speichert das neue UTXO-Set in der utxos-Tabelle
-            objects.verify_block(block, prev_block, prev_utxo, prev_height, None)
+            objects.verify_block(block, prev_block, prev_utxo, prev_height, txs)
 
         else:
             raise ErrorInvalidFormat("Received an object which is neither transaction nor block")
@@ -529,6 +554,12 @@ async def handle_object_msg(msg_dict, peer_self, writer):
         obj_str = objects.canonicalize(obj_dict).decode('utf-8')
         cur.execute("INSERT INTO objects VALUES(?, ?)", (objid, obj_str))
         con.commit()
+
+        # notify all waiting tasks that a new transaction has been stored
+        if obj_dict['type'] == 'transaction':
+            async with TX_WAIT_LOCK:
+                TX_WAIT_LOCK.notify_all()
+    
     except NodeException as e: # whatever the reason, just reject this
         con.rollback()
         print("Failed to verify TX '{}': {}".format(objid, str(e)))
@@ -542,6 +573,9 @@ async def handle_object_msg(msg_dict, peer_self, writer):
     # gossip the new object to all connections
     for k, q in CONNECTIONS.items():
         await q.put(mk_ihaveobject_msg(objid))
+
+async def verify_block_task():
+    pass
 
 async def broadcast_getobject(objid):
     for k, q in CONNECTIONS.items():

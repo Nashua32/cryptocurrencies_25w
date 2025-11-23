@@ -11,7 +11,6 @@ import copy
 import hashlib
 import json
 import re
-from main import broadcast_getobject, gather_previous_txs
 
 import constants as const
 
@@ -179,6 +178,7 @@ def validate_transaction(trans_dict):
 
 # syntactic checks
 def validate_block(block_dict):
+    print("Validating block")
     if not isinstance(block_dict, dict):
         raise ErrorInvalidFormat("Block object invalid: Not a dictionary!")
     
@@ -197,8 +197,6 @@ def validate_block(block_dict):
             raise ErrorInvalidFormat(f"Block object invalid: txid at index {index} not a string")
         index += 1
 
-
-
     # Validating 'nonce'
     if 'nonce' not in block_dict:
         raise ErrorInvalidFormat("Block object invalid: nonce not set")
@@ -214,7 +212,6 @@ def validate_block(block_dict):
         raise ErrorInvalidGenesis("Block object invalid: Block is not Genesis block, but has a null previd")
     if not isinstance(block_dict['previd'], str):
         raise ErrorInvalidFormat("Block object invalid: previd not a string")
-
 
     # Validating 'created'
     if 'created' not in block_dict:
@@ -234,14 +231,14 @@ def validate_block(block_dict):
     if 'note' in block_dict:
         if not is_ascii_printable(block_dict['note']):
             raise ErrorInvalidFormat("Block object invalid: note not ASCII-printable")
-        if len(block_dict['note'] > 128):
+        if len(block_dict['note']) > 128:
             raise ErrorInvalidFormat("Block object invalid: note too long")
 
     # Validating 'miner'
     if 'miner' in block_dict:
         if not is_ascii_printable(block_dict['miner']):
             raise ErrorInvalidFormat("Block object invalid: miner not ASCII-printable")
-        if len(block_dict['miner'] > 128):
+        if len(block_dict['miner']) > 128:
             raise ErrorInvalidFormat("Block object invalid: miner too long")
 
 # syntactic checks
@@ -295,7 +292,7 @@ class TXVerifyException(Exception):
 def verify_transaction(tx_dict, input_txs):
     # coinbase transaction
     if 'height' in tx_dict:
-        return # assume all syntactically valid coinbase transactions are valid
+        return verify_coinbase(tx_dict)
 
     # regular transaction
     insum = 0 # sum of input values
@@ -429,6 +426,7 @@ def update_utxo_and_calculate_fee(tx, utxo):
 
 # verify that a block is valid in the current chain state, using known transactions txs
 def verify_block(block, prev_block, prev_utxo, prev_height, txs):
+    print("Verifying block")
     
     # Checking if T is the required target
     if not block['T'] == const.BLOCK_TARGET:
@@ -442,21 +440,6 @@ def verify_block(block, prev_block, prev_utxo, prev_height, txs):
     block_id = get_objid(block)
     if not int(block_id, 16) < int(block['T'], 16):
         raise ErrorInvalidBlockPOW("Block invalid: Block does not satisfy Proof-Of-Work equation")
-
-    # Checking if we have all tx correspondings to the txids in the database
-    tx_ids = block['txids']
-    txs = []
-    for tx_id in tx_ids:
-
-        # If not, we send a getobject msg to the peers and leave validation pending ...
-        tx = get_db_object(tx_id)
-        if not tx:
-            broadcast_getobject(tx_id)
-
-            # ... and send a UnfindableObject error back (see description of UNFINDABLE_OBJECT in Kerma project description)
-            raise ErrorUnfindableObject("Block Verification put on hold: Referenced transaction not in local database") 
-        
-        txs.append(tx)
         
 
     # ---- Task 2: UTXO-Set über alle TXs des Blocks fortschreiben ----
@@ -493,18 +476,20 @@ def verify_block(block, prev_block, prev_utxo, prev_height, txs):
     potential_coinbase = txs[0]
     # And validating it if there is one
     if 'height' in potential_coinbase:
-        verify_coinbase(potential_coinbase, txs[1:], get_block_height(block))
+        verify_coinbase(potential_coinbase, txs[1:], prev_height)
     block_id = get_objid(block)
     store_block_utxo(block_id, current_utxo)
 
 
 # INPUT: 
 # coinbase_tx ... the coinbase tx in the block, 
-# block_txs ... the non-coinbase transactions in the block, 
-# height ... the height of the block the coinbase transaction belongs to
-def verify_coinbase(coinbase_tx, block_txs, height):
+# block_txs (Optional) ... the non-coinbase transactions in the block, 
+# prev_height (Optional) ... the height of the block preceeding the block the coinbase transaction belongs to
+def verify_coinbase(coinbase_tx, block_txs = None, prev_height = None):
+    print("Verifying coinbase")
+    outputs = coinbase_tx['outputs'][0]
+
     # Validate public key
-    outputs = coinbase_tx['outputs']
     if not 'pubkey' in outputs or not validate_pubkey(outputs['pubkey']):
         raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase tx contains invalid public key")
     
@@ -512,17 +497,22 @@ def verify_coinbase(coinbase_tx, block_txs, height):
     if not 'value' in outputs or not isinstance(outputs['value'], int):
         raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase tx contains invalid value")
     
-    # Validate height
-    if not coinbase_tx['height'] == height:
-        raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase height doesn't match block height")
+    if prev_height:
+        # Validate height
+        if not coinbase_tx['height'] == prev_height + 1:
+            raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase height doesn't match block height")
+    
+    if not block_txs:
+        return
     
     # calculate transaction fees
     transaction_fees = 0
 
     con = sqlite3.connect(const.DB_NAME)
+    cur = con.cursor()
     for block_tx in block_txs:
         # the fee of a transaction is the sum of its input values minus the sum of its output values
-        prev_txs = gather_previous_txs(con, block_tx)
+        prev_txs = gather_previous_txs(cur, block_tx)
         input_values = 0
         for block_tx_input in block_tx['inputs']:
             prev_txid = block_tx_input['outpoint']['txid']
@@ -542,8 +532,36 @@ def verify_coinbase(coinbase_tx, block_txs, height):
     if outputs['value'] > transaction_fees + const.BLOCK_REWARD:
         raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase tx output higher than transaction fees + block reward")
 
+# return a list of transactions that tx_dict references
+def gather_previous_txs(db_cur, tx_dict):
+    # coinbase transaction
+    if 'height' in tx_dict:
+        return {}
+
+    # regular transaction
+    prev_txs = {}
+    for i in tx_dict['inputs']:
+        ptxid = i['outpoint']['txid']
+
+        res = db_cur.execute("SELECT obj FROM objects WHERE oid = ?", (ptxid,))
+        first_res = res.fetchone()
+
+        if not first_res is None:
+            ptx_str = first_res[0]
+            ptx_dict = expand_object(ptx_str)
+
+            if ptx_dict['type'] != 'transaction':
+                raise ErrorInvalidFormat(f"Transaction attempts to spend from a block")
+
+            prev_txs[ptxid] = ptx_dict
+    
+
+    return prev_txs
 
 def get_block_height(block_dict):
+    if get_objid(block_dict) == const.GENESIS_BLOCK_ID:
+        return 0
+
     height = 1
 
     previd = block_dict['previd']
@@ -555,13 +573,18 @@ def get_block_height(block_dict):
     
     return height
 
+# returns the object as a JSON dict if it exists, and None if not
 def get_db_object(objid):
     con = sqlite3.connect(const.DB_NAME)
     try:
         cur = con.cursor()
         res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (objid,))
 
-        return res.fetchone()
+        object = res.fetchone()
+        if not object:
+            return None
+
+        return expand_object(object[0])
     
     except Exception as e:
         con.rollback()
