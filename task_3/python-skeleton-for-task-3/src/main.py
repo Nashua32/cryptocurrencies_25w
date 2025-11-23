@@ -490,9 +490,39 @@ async def handle_object_msg(msg_dict, peer_self, writer):
         if obj_dict['type'] == 'transaction':
             prev_txs = gather_previous_txs(cur, obj_dict)
             objects.verify_transaction(obj_dict, prev_txs)
+
+        elif obj_dict['type'] == 'block':
+            block = obj_dict
+            block_id = objid
+            previd = block['previd']
+
+            # Parent-Block muss bekannt sein (außer Genesis, aber die haben wir vorab in der DB)
+            if previd is None:
+                # Ein fremder Genesis-Block sollte in deinem Setup nicht aus dem Netzwerk kommen.
+                raise ErrorInvalidFormat("Received block with null previd from network")
+
+            prev_block = objects.get_db_object(previd)
+            if prev_block is None:
+                # Parent fehlt -> getobject an Peers schicken und abbrechen
+                await broadcast_getobject(previd)
+                raise ErrorUnfindableObject("Block verification put on hold: Previous block not in local database")
+
+            # UTXO-Set nach dem Parent-Block laden
+            prev_utxo = objects.load_block_utxo(previd)
+
+            # Blockhöhe kannst du zur Vollständigkeit mitgeben (wird in verify_block aktuell nicht verwendet)
+            prev_height = objects.get_block_height(prev_block)
+
+            # verify_block:
+            # - prüft T, Timestamp, PoW
+            # - lädt und prüft alle TXs im Block
+            # - führt das UTXO-Set auf Basis von prev_utxo fort
+            # - speichert das neue UTXO-Set in der utxos-Tabelle
+            objects.verify_block(block, prev_block, prev_utxo, prev_height, None)
+
         else:
-            # assert: not reached during grading of task 2
-            raise ErrorInvalidFormat("Received an object which is not a transaction, rejecting for now")
+            raise ErrorInvalidFormat("Received an object which is neither transaction nor block")
+            
 
         print("Adding new object '{}'".format(objid))
 

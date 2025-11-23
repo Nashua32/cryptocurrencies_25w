@@ -13,7 +13,12 @@ def createDB():
     try:
         cur = con.cursor()
         cur.execute("CREATE TABLE IF NOT EXISTS objects(oid VARCHAR(64) PRIMARY KEY, obj TEXT NOT NULL)")
-
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS utxos(
+                blockid VARCHAR(64) PRIMARY KEY,
+                utxo    TEXT NOT NULL
+            )
+        """)
         # Preload genesis block
         res = cur.execute("SELECT obj FROM objects WHERE oid = ?", (const.GENESIS_BLOCK_ID,))
         if res.fetchone() is None:
