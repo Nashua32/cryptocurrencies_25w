@@ -330,31 +330,18 @@ def verify_transaction(tx_dict, input_txs):
     if insum < sum([o['value'] for o in tx_dict['outputs']]):
         raise ErrorInvalidTxConservation("Sum of inputs < sum of outputs!")
 
-# ---- UTXO helper functions (Task 1+2) ----
 
 def _utxo_to_json(utxo):
-    """
-    utxo: set[(txid, index)]
-    -> JSON-String für DB: Liste von [txid, index]
-    """
-    # sortieren für deterministische Darstellung
     as_list = sorted([[txid, idx] for (txid, idx) in utxo])
     return json.dumps(as_list, separators=(',', ':'))
 
 
 def _utxo_from_json(s):
-    """
-    JSON-String -> utxo: set[(txid, index)]
-    """
     data = json.loads(s)
     return {(txid, idx) for txid, idx in data}
 
 
 def load_block_utxo(blockid):
-    """
-    UTXO-Set nach diesem Block aus der DB laden.
-    Wenn wir noch keins gespeichert haben, leeres Set.
-    """
     con = sqlite3.connect(const.DB_NAME)
     try:
         cur = con.cursor()
@@ -368,9 +355,6 @@ def load_block_utxo(blockid):
 
 
 def store_block_utxo(blockid, utxo):
-    """
-    UTXO-Set nach diesem Block in die DB schreiben.
-    """
     con = sqlite3.connect(const.DB_NAME)
     try:
         cur = con.cursor()
@@ -391,37 +375,28 @@ def store_block_utxo(blockid, utxo):
 def update_utxo_and_calculate_fee(tx, utxo):
     txid = get_objid(tx)
 
-    # Coinbase-Transaktion: hat keine Inputs, erzeugt nur Outputs
     if 'height' in tx:
         for idx, _out in enumerate(tx['outputs']):
             utxo.add((txid, idx))
         return 0
 
-    # Normale Transaktion
-    # 1) Inputs müssen alle im aktuellen UTXO-Set sein
     for txin in tx['inputs']:
         prev_txid = txin['outpoint']['txid']
         prev_idx  = txin['outpoint']['index']
         key = (prev_txid, prev_idx)
 
         if key not in utxo:
-            # -> entweder Output existiert nicht oder wurde bereits ausgegeben
             raise ErrorInvalidTxOutpoint(
                 f"Transaction tries to spend non-existing or already spent output {key}"
             )
 
-    # 2) Jetzt Inputs entfernen
     for txin in tx['inputs']:
         prev_txid = txin['outpoint']['txid']
         prev_idx  = txin['outpoint']['index']
         utxo.remove((prev_txid, prev_idx))
 
-    # 3) Neue Outputs hinzufügen
     for idx, _out in enumerate(tx['outputs']):
         utxo.add((txid, idx))
-
-    # Fee wird (noch) nicht hier berechnet, sondern in verify_coinbase,
-    # daher 0 zurückgeben.
     return 0
 
 # verify that a block is valid in the current chain state, using known transactions txs
@@ -442,25 +417,19 @@ def verify_block(block, prev_block, prev_utxo, prev_height, txs):
         raise ErrorInvalidBlockPOW("Block invalid: Block does not satisfy Proof-Of-Work equation")
         
 
-    # ---- Task 2: UTXO-Set über alle TXs des Blocks fortschreiben ----
 
     con = sqlite3.connect(const.DB_NAME)
     cur = con.cursor()
 
-    # UTXO-Set nach dem Parent-Block als Startpunkt
-    # prev_utxo kommt als Argument rein; fallback: leeres Set
+
     current_utxo = set(prev_utxo) if prev_utxo is not None else set()
 
     total_fees = 0
 
     for tx in txs:
-        # (a) TX wie in Task 2 validieren
         validate_transaction(tx)
         prev_txs = gather_previous_txs(cur, tx)
         verify_transaction(tx, prev_txs)
-
-        # Zusätzlich: sicherstellen, dass alle Inputs im UTXO-Set sind
-        # -> passiert in update_utxo_and_calculate_fee
         fee = update_utxo_and_calculate_fee(tx, current_utxo)
         total_fees += fee
 

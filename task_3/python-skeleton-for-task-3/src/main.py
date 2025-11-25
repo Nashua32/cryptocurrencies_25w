@@ -500,10 +500,7 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             if prev_block is None:
                 raise ErrorUnknownObject(f"Parent block of block with id {block_id} not known")
 
-            # UTXO-Set nach dem Parent-Block laden
             prev_utxo = objects.load_block_utxo(previd)
-
-            # Blockhöhe kannst du zur Vollständigkeit mitgeben (wird in verify_block aktuell nicht verwendet)
             prev_height = objects.get_block_height(prev_block)
 
             # Checking if we have all tx correspondings to the txids in the database
@@ -537,12 +534,6 @@ async def handle_object_msg(msg_dict, peer_self, writer):
                         tx = objects.get_db_object(tx_id)
         
                 txs.append(tx)
-
-            # verify_block:
-            # - prüft T, Timestamp, PoW
-            # - lädt und prüft alle TXs im Block
-            # - führt das UTXO-Set auf Basis von prev_utxo fort
-            # - speichert das neue UTXO-Set in der utxos-Tabelle
             objects.verify_block(block, prev_block, prev_utxo, prev_height, txs)
 
         else:
