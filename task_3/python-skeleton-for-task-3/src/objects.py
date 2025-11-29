@@ -372,19 +372,22 @@ def store_block_utxo(blockid, utxo):
 
 # apply tx to utxo
 # returns mining fee
-def update_utxo_and_calculate_fee(tx, utxo):
+def update_utxo_and_calculate_fee(tx, utxo, block_coinbase_id: str | None = None):
     txid = get_objid(tx)
 
     if 'height' in tx:
         for idx, _out in enumerate(tx['outputs']):
             utxo.add((txid, idx))
-        return 0
+        return txid
 
     for txin in tx['inputs']:
         prev_txid = txin['outpoint']['txid']
         prev_idx  = txin['outpoint']['index']
         key = (prev_txid, prev_idx)
 
+        if block_coinbase_id and  prev_txid == block_coinbase_id:
+            raise ErrorInvalidTxOutpoint(f"Transaction tries to spend from a coinbase transaction in the same block")
+        
         if key not in utxo:
             raise ErrorInvalidTxOutpoint(
                 f"Transaction tries to spend non-existing or already spent output {key}"
@@ -397,7 +400,7 @@ def update_utxo_and_calculate_fee(tx, utxo):
 
     for idx, _out in enumerate(tx['outputs']):
         utxo.add((txid, idx))
-    return 0
+    return None
 
 # verify that a block is valid in the current chain state, using known transactions txs
 def verify_block(block, prev_block, prev_utxo, prev_height, txs):
@@ -418,22 +421,27 @@ def verify_block(block, prev_block, prev_utxo, prev_height, txs):
         
 
 
-    con = sqlite3.connect(const.DB_NAME)
-    cur = con.cursor()
+    try:
+        con = sqlite3.connect(const.DB_NAME)
+        cur = con.cursor()
 
 
-    current_utxo = set(prev_utxo) if prev_utxo is not None else set()
+        current_utxo = set(prev_utxo) if prev_utxo is not None else set()
 
-    total_fees = 0
+        block_coinbase_id = None
+        for tx in txs:
+            validate_transaction(tx)
+            prev_txs = gather_previous_txs(cur, tx)
+            verify_transaction(tx, prev_txs)
+            
+            potential_coinbase_id = update_utxo_and_calculate_fee(tx, current_utxo, block_coinbase_id)
 
-    for tx in txs:
-        validate_transaction(tx)
-        prev_txs = gather_previous_txs(cur, tx)
-        verify_transaction(tx, prev_txs)
-        fee = update_utxo_and_calculate_fee(tx, current_utxo)
-        total_fees += fee
-
-    con.close()
+            if potential_coinbase_id:
+                block_coinbase_id = potential_coinbase_id
+    except Exception as e:
+        raise e
+    finally:
+        con.close()
 
 
     # Checking for coinbase transactions
@@ -463,39 +471,43 @@ def verify_coinbase(coinbase_tx, block_txs = None, prev_height = None):
         raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase tx contains invalid public key")
     
     # Validate that a transaction output value exists
-    if not 'value' in outputs or not isinstance(outputs['value'], int):
+    if not 'value' in outputs or not isinstance(outputs['value'], int) or outputs['value'] < 0:
         raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase tx contains invalid value")
     
-    if prev_height:
+    if prev_height is not None:
         # Validate height
         if not coinbase_tx['height'] == prev_height + 1:
             raise ErrorInvalidBlockCoinbase("Coinbase tx in block invalid: Coinbase height doesn't match block height")
     
-    if not block_txs:
+    # we don't validate the output created by a coinbase transaction that is not sent in a block
+    if not block_txs and not prev_height:
         return
     
     # calculate transaction fees
     transaction_fees = 0
 
-    con = sqlite3.connect(const.DB_NAME)
-    cur = con.cursor()
-    for block_tx in block_txs:
-        # the fee of a transaction is the sum of its input values minus the sum of its output values
-        prev_txs = gather_previous_txs(cur, block_tx)
-        input_values = 0
-        for block_tx_input in block_tx['inputs']:
-            prev_txid = block_tx_input['outpoint']['txid']
-            prev_tx_index = block_tx_input['outpoint']['index']
+    try:
+        con = sqlite3.connect(const.DB_NAME)
+        cur = con.cursor()
+        for block_tx in block_txs:
+            # the fee of a transaction is the sum of its input values minus the sum of its output values
+            prev_txs = gather_previous_txs(cur, block_tx)
+            input_values = 0
+            for block_tx_input in block_tx['inputs']:
+                prev_txid = block_tx_input['outpoint']['txid']
+                prev_tx_index = block_tx_input['outpoint']['index']
 
-            input_values += prev_txs[prev_txid]['outputs'][prev_tx_index]['value']
-        
-        output_values = 0
-        for block_tx_output in block_tx['outputs']:
-            output_values += block_tx_output['value']
-        
-        transaction_fees += input_values - output_values
-
-    con.close()
+                input_values += prev_txs[prev_txid]['outputs'][prev_tx_index]['value']
+            
+            output_values = 0
+            for block_tx_output in block_tx['outputs']:
+                output_values += block_tx_output['value']
+            
+            transaction_fees += input_values - output_values
+    except Exception as e:
+        raise e
+    finally:
+        con.close()
 
     # Verify weak law of conservatism
     if outputs['value'] > transaction_fees + const.BLOCK_REWARD:
