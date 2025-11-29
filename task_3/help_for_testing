@@ -1,0 +1,43 @@
+Hello message:
+
+{"type":"hello","version":"0.10.2","agent":"netcat"}
+
+signature pair:
+privkey: 
+pubkey: 712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e
+
+Stuff to do still:
+	- fix signatures (run python script, change pubkey in first transaction)
+		- script uses fixed keys now (good)
+	- fix objectids?
+	- see if we can actually send the transitions
+
+
+****Coinbase transaction t0:
+	{"type":"object","object":{"type":"transaction","height":1,"outputs":		[{"pubkey":"712651f450ba05b63898b99ef5f7ba45632e8e2527f7f715cd671ec4024cc51e","value":50000000000000}]}}
+
+
+****Block containing t0:
+	{"type":"object","object":{"T":"0000abc000000000000000000000000000000000000000000000000000000000","created":1671148800,"miner":"student","nonce":"0000000000000000000000000000000000000000000000000000000000002bc9","note":"Test block on assignment genesis with 1 coinbase tx","previd":"00002fa163c7dab0991544424b9fd302bb1782b185e5a3bbdf12afb758e57dee","txids":["b25a4d394241d93268648857a75507c0450dff95cd096553c607473987bdfae1"],"type":"block"}}
+	
+	
+****Transaction t1 spending output of t0: (valid)
+	{"type":"object","object":{"type":"transaction","inputs":[{"outpoint":{"txid":"b57ac7e689d3671b3cb61f0c415c25d1f6d36eeab59b03f326e4b63a258162b4","index":0},"sig":"db84fba30c55b20d867fc825ef32d05bf7628a44c616ee35aaadca44fe5d94fa9b08518f7d9d59468caf3fa3822223a19c2fb326478591f368d3a9a3e5640500"}],"outputs":[{"pubkey":"a7cbde2778e80e132712e8147e668a8f95c1f86b8bcbd366d5eb492d63ea6c99","value":50000000000000}]}}
+
+
+
+
+****Block containing t1: (valid)
+	{"type":"object","object":{"type":"block","txids":["7915927aeb23b9ee6ef6ea8d83e1a40f0856da6307607de0e42988e4b6d1ddf2"],"previd":"00002fa163c7dab0991544424b9fd302bb1782b185e5a3bbdf12afb758e57dee","created":1671148900,"miner":"student","note":"block with valid spend","nonce":"000000000000000000000000000000000000000000000000000000000000aaaa","T":"0000abc000000000000000000000000000000000000000000000000000000000"}}
+
+
+
+****Transaction t2 spending t0: (invalid)
+	{"type":"object","object":{"type":"transaction","inputs":[{"outpoint":{"txid":"6ebfb4c8e8e9b19dcf54c6ce3e1e143da1f473ea986e70c5cb8899a4671c933a","index":0},"sig":"b1f62648c67093c6b8dad15012bf5b7256ac0f0eb95f21aa21c8f5f3a9d6e1d20e8412b75fdec9f83969d136052b04cbd03345cad7212abfea498207"}],"outputs":[{"pubkey":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","value":50000000000000}]}}
+
+
+
+****Block containing t2: (invalid)
+	{"type":"object","object":{"type":"block","txids":["342106f7f4776937d02a68ca8513d3bf990bd9699c48a5b3737fff213c53c29e"],"previd":"a66ea07adbb954b5ee7747f58193e1ef2b695aa8fea8b91bef99dc05e56619a7","created":1671149000,"miner":"student","note":"block with invalid double spend","nonce":"000000000000000000000000000000000000000000000000000000000000bbbb","T":"0000abc000000000000000000000000000000000000000000000000000000000"}}
+
+
