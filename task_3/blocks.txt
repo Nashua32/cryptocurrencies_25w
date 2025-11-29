@@ -1,0 +1,65 @@
+
+SEND THESE OBJECTS BEFORE TESTING ANYTHING. EVERY TEST DEPENDS ON THEM!
+Also comment out all parts that verify signatures in the transaction validation/verification functions
+
+{"type":"hello","version":"0.10.2","agent":"netcat"}
+
+VALID_COINBASE:
+{"type":"object","object":{"height": 1,"outputs":[{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f","value": 50000000000000}],"type": "transaction"}}
+
+VALID_BLOCK (needs VALID_COINBASE): 
+{"type":"object","object":{"T": "0000abc000000000000000000000000000000000000000000000000000000000", "created": 1671148800, "miner": "grader", "nonce": "00000000000000000000000000000000000000000000000000000000000463cf", "note": "This block has a coinbase transaction", "previd": "00002fa163c7dab0991544424b9fd302bb1782b185e5a3bbdf12afb758e57dee", "txids": ["6ebfb4c8e8e9b19dcf54c6ce3e1e143da1f473ea986e70c5cb8899a4671c933a"], "type": "block"}}
+
+
+----- Valid Block --> SHOULD WORK
+VALID_TRANSACTION:
+{"type":"object","object":{"type": "transaction", "inputs": [{"outpoint": {"txid": "6ebfb4c8e8e9b19dcf54c6ce3e1e143da1f473ea986e70c5cb8899a4671c933a", "index": 0}, "sig": "Nottested"}], "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 40000000000000}]}}
+
+VALID_COINBASE_2: 
+{"type":"object","object":{"height": 2, "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 60000000000000}], "type": "transaction"}}
+
+VALID_BLOCK_2 (needs VALID_COINBASE_2, VALID_TRANSACTION):
+{"type":"object","object":{"T": "0000abc000000000000000000000000000000000000000000000000000000000", "created": 1671148801, "miner": "grader", "nonce": "000000000000000000000000000000000000000000000000000000000003ae25", "previd": "000020cb0002575a71955763adf365c78182f0bb5bee767794ebc7346e0a2194", "txids": ["e9a034ab387ca68b0ed034c5ad60a62a0b26172c324b51b43ba1622ac2a7a584", "1db2d4f48e12121fad78a0a489032cc2b33614267a079450b58125ecb84b1705"], "type": "block"}}
+
+
+----- Block contains incorrect T --> SHOULD FAIL
+BLOCK_INCORRECT_TARGET (needs no previous blocks): 
+{"type":"object","object":{"T": "0000bbc000000000000000000000000000000000000000000000000000000000", "created": 1671148801, "miner": "grader", "nonce": "0000000000000000000000000000000000000000000000000000000000000000", "previd": "000020cb0002575a71955763adf365c78182f0bb5bee767794ebc7346e0a2194", "txids": ["e9a034ab387ca68b0ed034c5ad60a62a0b26172c324b51b43ba1622ac2a7a584", "1db2d4f48e12121fad78a0a489032cc2b33614267a079450b58125ecb84b1705"], "type": "block"}}
+
+
+----- Block contains incorrect PoW --> SHOULD FAIL
+BLOCK_INCORRECT_POW (needs no previous blocks):
+{"type":"object","object":{"T": "0000abc000000000000000000000000000000000000000000000000000000000", "created": 1671148801, "miner": "grader", "nonce": "0000000000000000000000000000000000000000000000000000000000000000", "previd": "000020cb0002575a71955763adf365c78182f0bb5bee767794ebc7346e0a2194", "txids": ["e9a034ab387ca68b0ed034c5ad60a62a0b26172c324b51b43ba1622ac2a7a584", "1db2d4f48e12121fad78a0a489032cc2b33614267a079450b58125ecb84b1705"], "type": "block"}}
+
+
+----- Block contains multiple transactions that spend from the same outpoint --> SHOULD FAIL
+VALID_COINBASE_2:
+{"type":"object","object":{"height": 2, "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 60000000000000}], "type": "transaction"}}
+
+VALID_TRANSACTION:
+{"type":"object","object":{"type": "transaction", "inputs": [{"outpoint": {"txid": "6ebfb4c8e8e9b19dcf54c6ce3e1e143da1f473ea986e70c5cb8899a4671c933a", "index": 0}, "sig": "Nottested"}], "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 40000000000000}]}}
+
+VALID_DOUBLE_SPEND_TRANSACTION:
+{"type":"object","object":{"type": "transaction", "inputs": [{"outpoint": {"txid": "6ebfb4c8e8e9b19dcf54c6ce3e1e143da1f473ea986e70c5cb8899a4671c933a", "index": 0}, "sig": "Nottested"}], "outputs": [{"pubkey": "3f0bc71a375c574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 40000000000000}]}}
+
+BLOCK_DOUBLE_SPEND_TRANSACTIONS (needs VALID_COINBASE_2, VALID_TRANSACTION, VALID_DOUBLE_SPEND_TRANSACTION):
+{"type":"object","object":{"T": "0000abc000000000000000000000000000000000000000000000000000000000", "created": 1671148801, "miner": "grader", "nonce": "000000000000000000000000000000000000000000000000000000000001664a", "previd": "000020cb0002575a71955763adf365c78182f0bb5bee767794ebc7346e0a2194", "txids": ["e9a034ab387ca68b0ed034c5ad60a62a0b26172c324b51b43ba1622ac2a7a584", "1db2d4f48e12121fad78a0a489032cc2b33614267a079450b58125ecb84b1705", "651a62a4cdfb4ea1af92fe06f8dfab1647cd94ab5fc04da2e9fd79bb6673b9e0"], "type": "block"}} 
+
+
+----- Block contains invalid coinbase (creates more money than block reward) --> SHOULD FAIL
+INVALID_COINBASE:
+{"type":"object","object":{"height": 2, "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 60000000000001}], "type": "transaction"}}
+
+BLOCK_INVALID_COINBASE (needs INVALID_COINBASE):
+{"type":"object","object":{"T": "0000abc000000000000000000000000000000000000000000000000000000000", "created": 1671148801, "miner": "grader", "nonce": "000000000000000000000000000000000000000000000000000000000004087c", "previd": "000020cb0002575a71955763adf365c78182f0bb5bee767794ebc7346e0a2194", "txids": ["984873f2ca2357605ead0bc979afa1a7016d838701dc9be7ff540568d1a4a909"], "type": "block"}}
+
+
+----- Block contains a transaction that spends from a coinbase transaction in the same block --> SHOULD FAIL
+VALID_COINBASE_2: 
+{"type":"object","object":{"height": 2, "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 60000000000000}], "type": "transaction"}}
+
+VALID_TRANSACTION_3: 
+{"type":"object","object":{"type": "transaction", "inputs": [{"outpoint": {"txid": "e9a034ab387ca68b0ed034c5ad60a62a0b26172c324b51b43ba1622ac2a7a584", "index": 0}, "sig": "Nottested"}], "outputs": [{"pubkey": "3f0bc71a375b574e4bda3ddf502fe1afd99aa020bf6049adfe525d9ad18ff33f", "value": 40000000000000}]}}
+
+BLOCK_SPENDS_FROM_COINBASE: 
+{"type":"object","object":{"T": "0000abc000000000000000000000000000000000000000000000000000000000", "created": 1671148801, "miner": "grader", "nonce": "00000000000000000000000000000000000000000000000000000000000028d0", "previd": "000020cb0002575a71955763adf365c78182f0bb5bee767794ebc7346e0a2194", "txids": ["e9a034ab387ca68b0ed034c5ad60a62a0b26172c324b51b43ba1622ac2a7a584", "ee1cae5ea29144d5ab674169cc78d7b44f5cef7baf1e469687280cdea8e65977"], "type": "block"}}
