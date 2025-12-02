@@ -506,34 +506,36 @@ async def handle_object_msg(msg_dict, peer_self, writer):
             # Checking if we have all tx correspondings to the txids in the database
             tx_ids = block['txids']
             txs = []
+            missing_txids = []
+
             for tx_id in tx_ids:
 
                 # If not, we send a getobject msg to the peers and leave validation pending ...
                 tx = objects.get_db_object(tx_id)
                 if tx is None:
-                    await write_msg(writer, mk_error_msg("Block verification put on hold", "UNFINDABLE_OBJECT"))
+                    missing_txids.append(tx_id)
                     await broadcast_getobject(tx_id)
+                else:
+                    txs.append(tx)
 
+                if missing_txids:
                     loop = asyncio.get_running_loop()
-                    started = loop.time()
+                    BLOCK_VERIFY_TASKS[block_id] = {
+                        "block": block,
+                        "prev_block": prev_block,
+                        "prev_utxo": prev_utxo,
+                        "prev_height": prev_height,
+                        "tx_ids": tx_ids,
+                        "started": loop.time(),
+                        "writer": writer
+                    }
 
-                    while not tx:
-                        # if we didn't receive the object in 5 seconds we stop the verification
-                        elapsed = loop.time() - started
-                        if elapsed >= 5.0:
-                            raise ErrorUnfindableObject("Block verification failed: Related transaction wasn't received in time")
+                    t = asyncio.create_task(verify_block_task(block_id))
+                    BACKGROUND_TASKS.add(t)
+                    t.add_done_callback(BACKGROUND_TASKS.discard)
 
-                        # we wait until a new transaction has been received ...
-                        async with TX_WAIT_LOCK:
-                            try:
-                                await asyncio.wait_for(TX_WAIT_LOCK.wait(), timeout=5.0 - elapsed)
-                            except asyncio.TimeoutError:
-                                raise ErrorUnfindableObject("Block verification failed: Related transaction wasn't received in time")
-                        
-                        # ... and check if it is the one we need
-                        tx = objects.get_db_object(tx_id)
-        
-                txs.append(tx)
+                    return
+                
             objects.verify_block(block, prev_block, prev_utxo, prev_height, txs)
 
         else:
@@ -565,8 +567,82 @@ async def handle_object_msg(msg_dict, peer_self, writer):
     for k, q in CONNECTIONS.items():
         await q.put(mk_ihaveobject_msg(objid))
 
-async def verify_block_task():
-    pass
+async def verify_block_task(block_id):
+    task_info = BLOCK_VERIFY_TASKS.get(block_id)
+    if task_info is None:
+        return
+
+    block = task_info["block"]
+    prev_block = task_info["prev_block"]
+    prev_utxo = task_info["prev_utxo"]
+    prev_height = task_info["prev_height"]
+    tx_ids = task_info["tx_ids"]
+    started = task_info["started"]
+    writer = task_info["writer"]
+
+    loop = asyncio.get_running_loop()
+    timeout = 5.0
+
+    try:
+        while True:
+            txs = []
+            missing = []
+
+            for tx_id in tx_ids:
+                tx = objects.get_db_object(tx_id)
+                if tx is None:
+                    missing.append(tx_id)
+                else:
+                    txs.append(tx)
+
+            if not missing:
+                objid = objects.get_objid(block)
+                print(f"All transactions present for block {objid}, verifying...")
+
+                con = sqlite3.connect(const.DB_NAME)
+                try:
+                    cur = con.cursor()
+
+                    objects.verify_block(block, prev_block, prev_utxo, prev_height, txs)
+
+                    print("Adding new object '{}'".format(objid))
+                    obj_str = objects.canonicalize(block).decode('utf-8')
+                    cur.execute("INSERT INTO objects VALUES(?, ?)", (objid, obj_str))
+                    con.commit()
+                except NodeException as e:
+                    con.rollback()
+                    print("Failed to verify block '{}': {}".format(objid, str(e)))
+                    return
+                except Exception as e:
+                    con.rollback()
+                    raise e
+                finally:
+                    con.close()
+
+                for k, q in CONNECTIONS.items():
+                    await q.put(mk_ihaveobject_msg(objid))
+
+                return
+
+            elapsed = loop.time() - started
+            if elapsed >= timeout:
+                print(f"Block verification failed for {block_id}: "
+                      f"Related transaction(s) {missing} weren't received in time")
+                await write_msg(writer, mk_error_msg("Block verification failed: Related transactions weren't received in time", "UNFINDABLE_OBJECT"))
+                return
+
+            time_left = timeout - elapsed
+            async with TX_WAIT_LOCK:
+                try:
+                    await asyncio.wait_for(TX_WAIT_LOCK.wait(), timeout=time_left)
+                except asyncio.TimeoutError:
+                    print(f"Block verification failed for {block_id}: "
+                          f"Related transaction(s) {missing} weren't received in time")
+                    await write_msg(writer, mk_error_msg("Block verification failed: Related transactions weren't received in time", "UNFINDABLE_OBJECT"))
+                    return
+
+    finally:
+        BLOCK_VERIFY_TASKS.pop(block_id, None)
 
 async def broadcast_getobject(objid):
     for k, q in CONNECTIONS.items():
