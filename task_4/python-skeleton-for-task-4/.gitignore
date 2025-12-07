@@ -1,0 +1,9 @@
+__pycache__
+message/__pycache__
+*.swp
+.vscode/
+peers.json
+.idea
+db.db
+_submission
+_test
