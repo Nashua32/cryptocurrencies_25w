@@ -564,7 +564,12 @@ async def handle_queue_msg(msg_dict, writer):
     #check if this is a special message
     #currently there are only type:'resumeValidation'
     if msg_dict['type'] == 'resumeValidation':
-        await handle_object_msg(msg_dict, None) #maybe replace None with writer.queue?
+        #get the queue associated with the connection who sent this message to continue validation there
+        peer = writer.get_extra_info('peername')
+        p = Peer(peer[0], peer[1])
+        queue = CONNECTIONS.get(p)
+
+        await handle_object_msg(msg_dict, queue) 
     else:
         await write_msg(writer, msg_dict)
 
