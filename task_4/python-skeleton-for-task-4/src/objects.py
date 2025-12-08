@@ -315,6 +315,8 @@ def verify_transaction(tx_dict, input_txs):
         return # assume all syntactically valid coinbase transactions are valid
 
     # regular transaction
+    missing = set() #set holding missing referenced objects
+
     insum = 0 # sum of input values
     in_dict = dict()
     for i in tx_dict['inputs']:
@@ -330,7 +332,9 @@ def verify_transaction(tx_dict, input_txs):
             in_dict[ptxid] = {ptxidx}
 
         if ptxid not in input_txs:
-            raise ErrorUnknownObject(f"Transaction {ptxid} not known")
+            #raise ErrorUnknownObject(f"Transaction {ptxid} not known")
+            missing.add(ptxid) #we do not know this transaction
+            continue
 
         ptx_dict = input_txs[ptxid]
 
@@ -347,8 +351,14 @@ def verify_transaction(tx_dict, input_txs):
 
         insum = insum + output['value']
 
+    #TODO: check if this makes sense? I think it does
+    if len(missing) > 0:
+        raise NeedMoreObjects(f"tx requires objects {missing}", missing)
+
     if insum < sum([o['value'] for o in tx_dict['outputs']]):
         raise ErrorInvalidTxConservation("Sum of inputs < sum of outputs!")
+    
+    
 
 def get_block_utxo_height(blockid):
     con = sqlite3.connect(const.DB_NAME)
@@ -423,8 +433,9 @@ def verify_block(block_dict):
 
     print(f'Set of missing transactions: {missing_txids}')
     if len(missing_txids) > 0:
-        txs = get_block_txs(block_dict['txids'])
-        missing_txids = set(block_dict['txids']) - set(txs.keys())
+        #calling this twice is unnecessary?
+        #txs = get_block_txs(block_dict['txids'])
+        #missing_txids = set(block_dict['txids']) - set(txs.keys())
         raise NeedMoreObjects(f"Block {blockid} requires transactions {missing_txids}", missing_txids)
 
     new_utxo, height = verify_block_tail(block_dict, prev_block, prev_utxo, prev_height, txs)

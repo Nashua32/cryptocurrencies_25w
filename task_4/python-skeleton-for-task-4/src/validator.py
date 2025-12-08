@@ -18,13 +18,20 @@ class Validator:
     #whenever thread receives block with unkown transactions invoke fetch, and call this
     def verification_pending(self, obj, thread, unknown_objects):
         print(f'New verification pending for object {obj}')
-        self.pending_objects[objects.get_objid(obj)] = {
+
+        objid = objects.get_objid(obj)
+        #create and store a timeout task so that it can be cancelled
+        timeout_task = asyncio.create_task(delay(self.timeout, 5))
+
+        self.pending_objects[objid] = {
             'object' : obj,
             'queue' : thread,
             'unknown_objects' : unknown_objects,
-            'timeout' : time.time() + 5
+            'timeout' : time.time() + 5,
+            'timeout_task' : timeout_task
         }
-        asyncio.create_task(delay(self.timeout, 5))
+        
+        #asyncio.create_task(delay(self.timeout, 5))
 
     def timeout(self):
         for key in self.pending_objects.copy().keys():
@@ -50,6 +57,9 @@ class Validator:
             if objid in unknown_objects:
                 unknown_objects.remove(objid)
                 if len(unknown_objects) == 0:
+                    #no unkown objects -> cancel the timeout
+                    o['timeout_task'].cancel()
+
                     self.pending_objects.pop(key)
                     #send this into the thread queue
                     try:
@@ -66,15 +76,20 @@ class Validator:
             unknown_objects = o['unknown_objects']
             if objid in unknown_objects:
                 #this object is invalid
+
+                #cancel the timeout task (we already know it's invalid)
+                o['timeout_task'].cancel()
+
                 #send this into the thread queue
                 try:
-                    o['thread'].put_nowait({
+                    o['queue'].put_nowait({
+                        'type' : 'error',
                         'msg': f"Object {key} depends on invalid object {objid}",
                         'name': "INVALID_ANCESTRY"
                     })
                     #TODO: propagate this errror
                     self.pending_objects.pop(key)
-                    self.new_invalid_object(key)
+                    self.new_invalid_object(key) #this object is marked as invalid too
                 except Exception:
                     pass
 

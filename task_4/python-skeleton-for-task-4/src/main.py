@@ -515,6 +515,7 @@ async def handle_object_msg(msg_dict, queue):
         for k, q in CONNECTIONS.items():
             await q.put(mk_ihaveobject_msg(objid))
 
+    #Exception raised if any referenced object is missing, thrown by the verification methods
     except NeedMoreObjects as e:
         print(f"Need more elements: {e.message}")
         for q in CONNECTIONS.values():
@@ -528,6 +529,7 @@ async def handle_object_msg(msg_dict, queue):
     except NodeException as e: # whatever the reason, just reject this
         con.rollback()
         print("Failed to verify object '{}': {}".format(objid, str(e)))
+        VALIDATOR.new_invalid_object(objid) #added this line, check if needed
         raise e # and re-raise this
     except Exception as e:
         print(f"An exception occured: {str(e)}")
@@ -562,7 +564,7 @@ async def handle_queue_msg(msg_dict, writer):
     #check if this is a special message
     #currently there are only type:'resumeValidation'
     if msg_dict['type'] == 'resumeValidation':
-        await handle_object_msg(msg_dict, None)
+        await handle_object_msg(msg_dict, None) #maybe replace None with writer.queue?
     else:
         await write_msg(writer, msg_dict)
 
