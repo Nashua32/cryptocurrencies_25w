@@ -1,0 +1,8 @@
+{"agent":"","type":"hello","version":"0.10.3"}
+{"type":"getpeers"}
+{"type":"getchaintip"}
+{"type":"hello","version":"0.10.3","agent":"netcat"}
+{"type":"object","object":{  "type":"transaction",  "height":1,  "outputs":[{"pubkey":"b8e126de1bb1a8779fb61c4936e3b7f8d93eb1f0395fd578b1bee199d678230e","value":1}]}}
+{"objectid":"0000999b1230195e626acceca83977ccd8af6d5e0e622c52dcb6b66bb82179ad","type":"ihaveobject"}
+{"type":"chaintip","blockid":"0000999b1230195e626acceca83977ccd8af6d5e0e622c52dcb6b66bb82179ad"}
+{"msg":"Chaintip points to an object that is not a block","name":"INVALID_FORMAT","type":"error"}
