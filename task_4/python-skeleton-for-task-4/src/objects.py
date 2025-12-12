@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import re
+import time
 
 import constants as const
 
@@ -415,28 +416,37 @@ def get_block_txs(txids):
 
 def verify_block(block_dict):
     print(f"Called verify_block for block {block_dict}")
+
+    if block_dict["created"] > time.time():
+        raise ErrorInvalidBlockTimestamp("Block created in the future!")
+
     blockid = get_objid(block_dict)
 
     prev_utxo = None
     prev_block = None
     prev_height = None
+    prev_block_missing = False
 
     previd = block_dict['previd']
     prev_block, prev_utxo, prev_height = get_block_utxo_height(previd)
 
     if prev_block is None:
-        raise ErrorUnknownObject("Previous block missing or invalid!")
+        prev_block_missing = True
+        #raise ErrorUnknownObject("Previous block missing or invalid!")
 
     # check if we have all TXs, fetch them if necessary
     txs = get_block_txs(block_dict['txids'])
-    missing_txids = set(block_dict['txids']) - set(txs.keys())
+    missing_objids = set(block_dict['txids']) - set(txs.keys())
 
-    print(f'Set of missing transactions: {missing_txids}')
-    if len(missing_txids) > 0:
+    if prev_block_missing:
+        missing_objids.add(previd)
+
+    print(f'Set of missing objids: {missing_objids}')
+    if len(missing_objids) > 0:
         #calling this twice is unnecessary?
         #txs = get_block_txs(block_dict['txids'])
         #missing_txids = set(block_dict['txids']) - set(txs.keys())
-        raise NeedMoreObjects(f"Block {blockid} requires transactions {missing_txids}", missing_txids)
+        raise NeedMoreObjects(f"Block {blockid} requires objects {missing_objids}", missing_objids)
 
     new_utxo, height = verify_block_tail(block_dict, prev_block, prev_utxo, prev_height, txs)
 

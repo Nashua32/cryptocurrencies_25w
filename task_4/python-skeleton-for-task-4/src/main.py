@@ -463,7 +463,7 @@ async def handle_getobject_msg(msg_dict, writer):
         obj_tuple = res.fetchone()
         # don't have object
         if obj_tuple is None:
-            return
+            raise ErrorUnknownObject(f"Object with id {objid} not found")
     finally:
         con.close()
 
