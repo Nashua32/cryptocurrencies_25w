@@ -30,5 +30,5 @@ that you don't want to run (I know this is stupid af, but I really wasn't motiva
 """
 
 if __name__ == "__main__":
-    #asyncio.run(test1_send_transaction_should_appear_in_mempool())
-    asyncio.run(test2_chain_reorganization_should_lead_to_new_mempool())
+    asyncio.run(test1_send_transaction_should_appear_in_mempool())
+    #asyncio.run(test2_chain_reorganization_should_lead_to_new_mempool())
